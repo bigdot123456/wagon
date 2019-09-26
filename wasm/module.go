@@ -6,6 +6,7 @@ package wasm
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 
@@ -24,6 +25,7 @@ type Function struct {
 	Sig  *FunctionSig
 	Body *FunctionBody
 	Host reflect.Value
+	Name string
 }
 
 // IsHost indicates whether this function is a host function as defined in:
@@ -115,15 +117,16 @@ func DecodeModule(r io.Reader) (*Module, error) {
 	if m.Version, err = readU32(reader); err != nil {
 		return nil, err
 	}
-
-	for {
-		done, err := m.readSection(reader)
-		if err != nil {
-			return nil, err
-		} else if done {
-			return m, nil
-		}
+	if m.Version != Version {
+		return nil, fmt.Errorf("wasm: unknown binary version: %d", m.Version)
 	}
+
+	err = newSectionsReader(m).readSections(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
 // ReadModule reads a module from the reader r. resolvePath must take a string
@@ -159,7 +162,6 @@ func ReadModule(r io.Reader, resolvePath ResolveFunc) (*Module, error) {
 		if err := fn(); err != nil {
 			return nil, err
 		}
-
 	}
 
 	logger.Printf("There are %d entries in the function index space.", len(m.FunctionIndexSpace))
